@@ -1,0 +1,50 @@
+name: GitHub Streak Saver
+
+on:
+  schedule:
+    # Runs every day at 23:00 UTC.
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Daily Contribution
+        id: check_contrib
+        shell: bash
+        run: |
+          set -euo pipefail
+          username="abdulsamad-codes"
+          today=$(date -u +%Y-%m-%d)
+          response=$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/users/${username}/events/public?per_page=100")
+
+          if grep -q "${today}" <<< "$response"; then
+            echo "Already contributed today. Skipping."
+            echo "has_pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No public activity found for today. Preparing to push."
+            echo "has_pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Make Auto-Commit
+        if: steps.check_contrib.outputs.has_pushed == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          echo "Streak saved on $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> streak_log.txt
+          git add streak_log.txt
+          git commit -m "chore: save streak [skip ci]"
+          git push
